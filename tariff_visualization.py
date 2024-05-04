@@ -1,51 +1,43 @@
+import re
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+from docx import Document
 
-# Sample data: replace with your actual data
-data = {
-    'Date': ['3/23/2018', '3/23/2018', '7/6/2018', '8/23/2018', '6/1/2019', '6/1/2019', 
-             '6/1/2019', '6/1/2019', '2/15/2020', '2/15/2020'],
-    'Category': ['Meat', 'Agricultural products, Metals, Chemicals', 'Agricultural products, Automobiles, Chemicals, Medical Equipment, Energy Products',
-                 'Agricultural products, Automobiles, Chemicals, Metals', 'Metals, Machinery', 'Electronic Components, Machinery',
-                 'Automobiles, Medical Equipment', 'Textiles and Apparel, Footwear', 'Agricultural products, Textiles and Apparel, Metals, Automobiles, Tools and Cutlery',
-                 'Chemicals, Seeds, Furniture'],
-    'Additional Tariff': ['25%', '15%', '25%', '25%', '25%', '20%', '10%', '5%', '10%', '5%']
-}
+def extract_hs_codes_and_tariffs(docx_path):
+    doc = Document(docx_path)
+    data = []
+    tariff_pattern = re.compile(r'(\d+\.?\d*)%:')  # Look for decimal or whole number percentage followed by colon
+    hs_code_pattern = re.compile(r"'\d{6}'")  # Pattern to match HS codes exactly six digits within quotes
+    current_wave = ""
+    current_year = 0
+    wave_year_mapping = {
+        "China’s Announcement to WTO": 2018,
+        "China’s Retaliatory Tariffs List 1": 2018,
+        "China’s Retaliatory Tariffs List 2": 2019,
+        "China’s Retaliatory Tariffs List 3": 2019,
+        "China’s Retaliatory Tariffs List 4": 2020
+    }
 
-df = pd.DataFrame(data)
-df['Date'] = pd.to_datetime(df['Date'])
+    for para in doc.paragraphs:
+        # Check if the paragraph is naming a wave and set current_wave and current_year
+        if any(wave in para.text for wave in wave_year_mapping):
+            current_wave = para.text.strip()
+            current_year = wave_year_mapping.get(current_wave, 0)
+        # Search for tariff percentage in the paragraph text
+        tariff_match = tariff_pattern.search(para.text)
+        if tariff_match:
+            tariff_rate = float(tariff_match.group(1))  # Convert to float to accommodate decimal tariffs
+            # Extract all HS codes in the paragraph
+            hs_codes = hs_code_pattern.findall(para.text)
+            for code in hs_codes:
+                hs_code = code.strip("'")
+                data.append({'HS 6': hs_code, 'Tariff Increase (%)': tariff_rate, 'Wave': current_wave, 'Year': current_year})
 
-# Group by Date and create a 'Wave' label
-df['Wave'] = df.groupby('Date').ngroup() + 1
-df_wave = df.drop_duplicates(subset=['Date'])
+    return pd.DataFrame(data)
 
-# Plotting
-fig, ax = plt.subplots(figsize=(20, 2))
-ax.set(title="Timeline of Retaliatory Tariffs")
+def save_data_to_excel(data, file_name):
+    # Save DataFrame to Excel
+    data.to_excel(file_name, index=False)
 
-# Ensure timeline starts from 2018 and ends with some padding
-ax.set_xlim(pd.Timestamp('2018-01-01'), df['Date'].max() + pd.DateOffset(months=6))
-
-# Draw dots for each unique date
-for date, wave in zip(df_wave['Date'], df_wave['Wave']):
-    ax.plot(date, 1, 'ro')  # 'ro' stands for red dot
-    ax.text(date, 1.05, f'Wave {wave}', horizontalalignment='right', rotation=45)
-
-# Set the formatter for the date to appear on the x-axis
-ax.xaxis.set_major_locator(mdates.MonthLocator())
-ax.xaxis.set_minor_locator(mdates.MonthLocator(bymonthday=15))  # Mid-month for better spacing
-ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-ax.xaxis.set_minor_formatter(mdates.DateFormatter('%m'))  # Only show month on the minor ticks
-
-# Enhance the display
-plt.grid(True, which='major', linestyle='--', linewidth='0.5', color='grey')
-plt.grid(True, which='minor', linestyle=':', linewidth='0.5', color='grey')
-ax.yaxis.set_visible(False)
-ax.spines['left'].set_visible(False)
-ax.spines['top'].set_visible(False)
-ax.spines['right'].set_visible(False)
-plt.tight_layout()  # Adjust the layout to make room for label text
-
-# Show the plot
-plt.show()
+# Usage
+data = extract_hs_codes_and_tariffs('Data\Lists of Goods China had Additional Tariffs on\Goods with Additional Tariffs by HS 6 codes and Retaliatory Lists.docx')
+save_data_to_excel(data, 'Results/products_tariffs.xlsx')
