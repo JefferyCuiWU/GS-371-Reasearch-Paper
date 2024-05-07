@@ -1,5 +1,5 @@
-# GS-371-Reasearch-Paper
-This repository is for our group's research on GS 371 course. It contains the data collected and python scripts used to process the data.
+# GS-376-Reasearch-Paper
+This repository is for our group's research on GS 376 course. It contains the data collected and python scripts used to process the data.
 
 ## Usage
 
